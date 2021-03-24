@@ -29,8 +29,7 @@ import org.thingsboard.server.common.data.DeviceTransportType;
 @JsonSubTypes({
         @JsonSubTypes.Type(value = DefaultDeviceTransportConfiguration.class, name = "DEFAULT"),
         @JsonSubTypes.Type(value = MqttDeviceTransportConfiguration.class, name = "MQTT"),
-        @JsonSubTypes.Type(value = Lwm2mDeviceTransportConfiguration.class, name = "LWM2M"),
-        @JsonSubTypes.Type(value = CoapDeviceTransportConfiguration.class, name = "COAP")})
+        @JsonSubTypes.Type(value = Lwm2mDeviceTransportConfiguration.class, name = "LWM2M")})
 public interface DeviceTransportConfiguration {
 
     @JsonIgnore

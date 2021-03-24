@@ -40,7 +40,6 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.locks.ReentrantLock;
 
 @Slf4j
 public abstract class AbstractNashornJsInvokeService extends AbstractJsInvokeService {
@@ -56,8 +55,6 @@ public abstract class AbstractNashornJsInvokeService extends AbstractJsInvokeSer
     private final AtomicInteger jsTimeoutMsgs = new AtomicInteger(0);
     private final FutureCallback<UUID> evalCallback = new JsStatCallback<>(jsEvalMsgs, jsTimeoutMsgs, jsFailedMsgs);
     private final FutureCallback<Object> invokeCallback = new JsStatCallback<>(jsInvokeMsgs, jsTimeoutMsgs, jsFailedMsgs);
-
-    private final ReentrantLock evalLock = new ReentrantLock();
 
     @Getter
     private final JsExecutorService jsExecutor;
@@ -124,15 +121,10 @@ public abstract class AbstractNashornJsInvokeService extends AbstractJsInvokeSer
         jsPushedMsgs.incrementAndGet();
         ListenableFuture<UUID> result = jsExecutor.executeAsync(() -> {
             try {
-                evalLock.lock();
-                try {
-                    if (useJsSandbox()) {
-                        sandbox.eval(jsScript);
-                    } else {
-                        engine.eval(jsScript);
-                    }
-                } finally {
-                    evalLock.unlock();
+                if (useJsSandbox()) {
+                    sandbox.eval(jsScript);
+                } else {
+                    engine.eval(jsScript);
                 }
                 scriptIdToNameMap.put(scriptId, functionName);
                 return scriptId;

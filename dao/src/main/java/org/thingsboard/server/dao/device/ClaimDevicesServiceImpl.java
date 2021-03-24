@@ -26,7 +26,6 @@ import org.springframework.cache.Cache;
 import org.springframework.cache.CacheManager;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
-import org.thingsboard.server.common.data.Customer;
 import org.thingsboard.server.common.data.DataConstants;
 import org.thingsboard.server.common.data.Device;
 import org.thingsboard.server.common.data.id.CustomerId;
@@ -36,11 +35,9 @@ import org.thingsboard.server.common.data.kv.AttributeKvEntry;
 import org.thingsboard.server.common.data.kv.BaseAttributeKvEntry;
 import org.thingsboard.server.common.data.kv.BooleanDataEntry;
 import org.thingsboard.server.dao.attributes.AttributesService;
-import org.thingsboard.server.dao.customer.CustomerService;
 import org.thingsboard.server.dao.device.claim.ClaimData;
 import org.thingsboard.server.dao.device.claim.ClaimResponse;
 import org.thingsboard.server.dao.device.claim.ClaimResult;
-import org.thingsboard.server.dao.device.claim.ReclaimResult;
 import org.thingsboard.server.dao.model.ModelConstants;
 
 import java.io.IOException;
@@ -64,8 +61,6 @@ public class ClaimDevicesServiceImpl implements ClaimDevicesService {
     private DeviceService deviceService;
     @Autowired
     private AttributesService attributesService;
-    @Autowired
-    private CustomerService customerService;
     @Autowired
     private CacheManager cacheManager;
 
@@ -163,22 +158,21 @@ public class ClaimDevicesServiceImpl implements ClaimDevicesService {
     }
 
     @Override
-    public ListenableFuture<ReclaimResult> reClaimDevice(TenantId tenantId, Device device) {
+    public ListenableFuture<List<Void>> reClaimDevice(TenantId tenantId, Device device) {
         if (!device.getCustomerId().getId().equals(ModelConstants.NULL_UUID)) {
             cacheEviction(device.getId());
-            Customer unassignedCustomer = customerService.findCustomerById(tenantId, device.getCustomerId());
+
             device.setCustomerId(null);
             deviceService.saveDevice(device);
             if (isAllowedClaimingByDefault) {
-                return Futures.immediateFuture(new ReclaimResult(unassignedCustomer));
+                return Futures.immediateFuture(Collections.emptyList());
             }
-            return Futures.transform(attributesService.save(
-                    tenantId, device.getId(), DataConstants.SERVER_SCOPE, Collections.singletonList(
-                            new BaseAttributeKvEntry(new BooleanDataEntry(CLAIM_ATTRIBUTE_NAME, true), System.currentTimeMillis())
-                    )), result -> new ReclaimResult(unassignedCustomer), MoreExecutors.directExecutor());
+            return attributesService.save(tenantId, device.getId(), DataConstants.SERVER_SCOPE, Collections.singletonList(
+                    new BaseAttributeKvEntry(new BooleanDataEntry(CLAIM_ATTRIBUTE_NAME, true),
+                            System.currentTimeMillis())));
         }
         cacheEviction(device.getId());
-        return Futures.immediateFuture(new ReclaimResult(null));
+        return Futures.immediateFuture(Collections.emptyList());
     }
 
     private List<Object> constructCacheKey(DeviceId deviceId) {

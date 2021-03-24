@@ -26,12 +26,9 @@ import org.eclipse.leshan.core.util.StringUtils;
 import javax.xml.datatype.DatatypeConfigurationException;
 import javax.xml.datatype.DatatypeFactory;
 import javax.xml.datatype.XMLGregorianCalendar;
-import java.math.BigInteger;
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
 import java.util.Date;
-
-import static org.eclipse.leshan.core.model.ResourceModel.Type.OPAQUE;
 
 @Slf4j
 public class LwM2mValueConverterImpl implements LwM2mValueConverter {
@@ -53,9 +50,6 @@ public class LwM2mValueConverterImpl implements LwM2mValueConverter {
         if (currentType == expectedType) {
             /** expected type */
             return value;
-        }
-        if (currentType == null) {
-            currentType = OPAQUE;
         }
 
         switch (expectedType) {
@@ -136,17 +130,9 @@ public class LwM2mValueConverterImpl implements LwM2mValueConverter {
                         return String.valueOf(value);
                     case TIME:
                         String DATE_FORMAT = "MMM d, yyyy HH:mm a";
-                        Long timeValue;
-                        try {
-                            timeValue = ((Date) value).getTime();
-                        }
-                        catch (Exception e){
-                           timeValue = new BigInteger((byte [])value).longValue();
-                        }
+                        Long timeValue = ((Date) value).getTime();
                         DateFormat formatter = new SimpleDateFormat(DATE_FORMAT);
                         return formatter.format(new Date(timeValue));
-                    case OPAQUE:
-                        return Hex.encodeHexString((byte[])value);
                     default:
                         break;
                 }
@@ -157,7 +143,7 @@ public class LwM2mValueConverterImpl implements LwM2mValueConverter {
                     log.debug("Trying to convert hexadecimal string [{}] to byte array", value);
                     // TODO check if we shouldn't instead assume that the string contains Base64 encoded data
                     try {
-                        return Hex.decodeHex(((String)value).toCharArray());
+                        return Hex.decodeHex(((String) value).toCharArray());
                     } catch (IllegalArgumentException e) {
                         throw new CodecException("Unable to convert hexastring [%s] to byte array for resource %s", value,
                                 resourcePath);

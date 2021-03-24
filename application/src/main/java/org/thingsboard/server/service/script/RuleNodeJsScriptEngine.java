@@ -108,18 +108,13 @@ public class RuleNodeJsScriptEngine implements org.thingsboard.rule.engine.api.S
     }
 
     @Override
-    public List<TbMsg> executeUpdate(TbMsg msg) throws ScriptException {
+    public TbMsg executeUpdate(TbMsg msg) throws ScriptException {
         JsonNode result = executeScript(msg);
-        if (result.isObject()) {
-            return Collections.singletonList(unbindMsg(result, msg));
-        } else if (result.isArray()){
-            List<TbMsg> res = new ArrayList<>(result.size());
-            result.forEach(jsonObject -> res.add(unbindMsg(jsonObject, msg)));
-            return res;
-        } else {
+        if (!result.isObject()) {
             log.warn("Wrong result type: {}", result.getNodeType());
             throw new ScriptException("Wrong result type: " + result.getNodeType());
         }
+        return unbindMsg(result, msg);
     }
 
     @Override

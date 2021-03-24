@@ -60,8 +60,7 @@ fi
 
 . $PROPERTIES_FILE
 
-if [ -f $SERVER_FILE_PREFIX.jks ] || [ -f $SERVER_FILE_PREFIX.cer ] || [ -f $SERVER_FILE_PREFIX.pub.pem ] || \
-   [ -f $SERVER_FILE_PREFIX.p12 ] || [ -f $SERVER_FILE_PREFIX.pem ] || [ -f $SERVER_FILE_PREFIX.pk8.pem ] ;
+if [ -f $SERVER_FILE_PREFIX.jks ] || [ -f $SERVER_FILE_PREFIX.cer ] || [ -f $SERVER_FILE_PREFIX.pub.pem ] || [ -f $SERVER_FILE_PREFIX.pub.der ];
 then
 while :
    do
@@ -77,9 +76,6 @@ while :
             rm -rf $SERVER_FILE_PREFIX.jks
             rm -rf $SERVER_FILE_PREFIX.pub.pem
             rm -rf $SERVER_FILE_PREFIX.cer
-            rm -rf $SERVER_FILE_PREFIX.p12
-            rm -rf $SERVER_FILE_PREFIX.pem
-            rm -rf $SERVER_FILE_PREFIX.pk8.pem
             break;
             ;;
         *)  echo "Please reply 'yes' or 'no'"
@@ -88,8 +84,6 @@ while :
     done
 fi
 
-echo "INFO: your hostname is $(hostname)"
-echo "INFO: your CN (domain suffix) for key is $DOMAIN_SUFFIX"
 echo "Generating SSL Key Pair..."
 
 EXT=""
@@ -126,32 +120,6 @@ keytool -export \
   -keystore $SERVER_FILE_PREFIX.jks \
   -storepass $SERVER_KEYSTORE_PASSWORD \
   -keypass $SERVER_KEY_PASSWORD
-
-echo "Converting keystore to pkcs12"
-keytool -importkeystore  \
-  -srckeystore $SERVER_FILE_PREFIX.jks \
-  -destkeystore $SERVER_FILE_PREFIX.p12 \
-  -srcalias $SERVER_KEY_ALIAS \
-  -srcstoretype jks \
-  -deststoretype pkcs12 \
-  -srcstorepass $SERVER_KEYSTORE_PASSWORD \
-  -deststorepass $SERVER_KEY_PASSWORD \
-  -srckeypass $SERVER_KEY_PASSWORD \
-  -destkeypass $SERVER_KEY_PASSWORD
-
-echo "Converting pkcs12 to pem"
-openssl pkcs12 -in $SERVER_FILE_PREFIX.p12 \
-  -out $SERVER_FILE_PREFIX.pem \
-  -passin pass:$SERVER_KEY_PASSWORD \
-  -passout pass:$SERVER_KEY_PASSWORD
-
-echo "Converting pem to pkcs8"
-openssl pkcs8 \
-  -topk8 \
-  -nocrypt \
-  -in $SERVER_FILE_PREFIX.pem \
-  -out $SERVER_FILE_PREFIX.pk8.pem \
-  -passin pass:$SERVER_KEY_PASSWORD
 
 status=$?
 if [[ $status != 0 ]]; then

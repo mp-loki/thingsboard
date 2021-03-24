@@ -15,18 +15,10 @@
 ///
 
 import { SubscriptionData, SubscriptionDataHolder } from '@app/shared/models/telemetry/telemetry.models';
-import {
-  AggregationType, calculateIntervalComparisonEndTime,
-  calculateIntervalEndTime,
-  calculateIntervalStartTime,
-  getCurrentTime,
-  getCurrentTimeForComparison,
-  SubscriptionTimewindow
-} from '@shared/models/time/time.models';
+import { AggregationType } from '@shared/models/time/time.models';
 import { UtilsService } from '@core/services/utils.service';
 import { deepClone } from '@core/utils';
 import Timeout = NodeJS.Timeout;
-import * as moment_ from 'moment';
 
 export declare type onAggregatedData = (data: SubscriptionData, detectChanges: boolean) => void;
 
@@ -81,29 +73,33 @@ export class DataAggregator {
   private resetPending = false;
   private updatedData = false;
 
-  private noAggregation = this.subsTw.aggregation.type === AggregationType.NONE;
-  private aggregationTimeout = Math.max(this.subsTw.aggregation.interval, 1000);
+  private noAggregation = this.aggregationType === AggregationType.NONE;
+  private aggregationTimeout = Math.max(this.interval, 1000);
   private readonly aggFunction: AggFunction;
 
   private intervalTimeoutHandle: Timeout;
   private intervalScheduledTime: number;
 
-  private startTs: number;
   private endTs: number;
   private elapsed: number;
 
   constructor(private onDataCb: onAggregatedData,
               private tsKeyNames: string[],
-              private subsTw: SubscriptionTimewindow,
+              private startTs: number,
+              private limit: number,
+              private aggregationType: AggregationType,
+              private timeWindow: number,
+              private interval: number,
+              private stateData: boolean,
               private utils: UtilsService,
               private ignoreDataUpdateOnIntervalTick: boolean) {
     this.tsKeyNames.forEach((key) => {
       this.dataBuffer[key] = [];
     });
-    if (this.subsTw.aggregation.stateData) {
+    if (this.stateData) {
       this.lastPrevKvPairData = {};
     }
-    switch (this.subsTw.aggregation.type) {
+    switch (this.aggregationType) {
       case AggregationType.MIN:
         this.aggFunction = min;
         break;
@@ -133,16 +129,18 @@ export class DataAggregator {
     return prevOnDataCb;
   }
 
-  public reset(subsTw: SubscriptionTimewindow) {
+  public reset(startTs: number, timeWindow: number, interval: number) {
     if (this.intervalTimeoutHandle) {
       clearTimeout(this.intervalTimeoutHandle);
       this.intervalTimeoutHandle = null;
     }
-    this.subsTw = subsTw;
     this.intervalScheduledTime = this.utils.currentPerfTime();
-    this.calculateStartEndTs();
+    this.startTs = startTs;
+    this.timeWindow = timeWindow;
+    this.interval = interval;
+    this.endTs = this.startTs + this.timeWindow;
     this.elapsed = 0;
-    this.aggregationTimeout = Math.max(this.subsTw.aggregation.interval, 1000);
+    this.aggregationTimeout = Math.max(this.interval, 1000);
     this.resetPending = true;
     this.updatedData = false;
     this.intervalTimeoutHandle = setTimeout(this.onInterval.bind(this), this.aggregationTimeout);
@@ -157,13 +155,12 @@ export class DataAggregator {
   }
 
   public onData(data: SubscriptionDataHolder, update: boolean, history: boolean, detectChanges: boolean) {
-    this.updatedData = true;
     if (!this.dataReceived || this.resetPending) {
       let updateIntervalScheduledTime = true;
       if (!this.dataReceived) {
         this.elapsed = 0;
         this.dataReceived = true;
-        this.calculateStartEndTs();
+        this.endTs = this.startTs + this.timeWindow;
       }
       if (this.resetPending) {
         this.resetPending = false;
@@ -186,21 +183,7 @@ export class DataAggregator {
         this.onInterval(history, detectChanges);
       }
     }
-  }
-
-  private calculateStartEndTs() {
-    this.startTs = this.subsTw.startTs + this.subsTw.tsOffset;
-    if (this.subsTw.quickInterval) {
-      if (this.subsTw.timeForComparison === 'previousInterval') {
-        const currentDate = getCurrentTime(this.subsTw.timezone);
-        this.endTs = calculateIntervalComparisonEndTime(this.subsTw.quickInterval, currentDate) + this.subsTw.tsOffset;
-      } else {
-        const currentDate = this.getCurrentTime();
-        this.endTs = calculateIntervalEndTime(this.subsTw.quickInterval, currentDate) + this.subsTw.tsOffset;
-      }
-    } else {
-      this.endTs = this.startTs + this.subsTw.aggregation.timeWindow;
-    }
+    this.updatedData = true;
   }
 
   private onInterval(history?: boolean, detectChanges?: boolean) {
@@ -212,19 +195,12 @@ export class DataAggregator {
       this.intervalTimeoutHandle = null;
     }
     if (!history) {
-      const delta = Math.floor(this.elapsed / this.subsTw.aggregation.interval);
+      const delta = Math.floor(this.elapsed / this.interval);
       if (delta || !this.data) {
-        const tickTs = delta * this.subsTw.aggregation.interval;
-        if (this.subsTw.quickInterval) {
-          const currentDate = this.getCurrentTime();
-          this.startTs = calculateIntervalStartTime(this.subsTw.quickInterval, currentDate) + this.subsTw.tsOffset;
-          this.endTs = calculateIntervalEndTime(this.subsTw.quickInterval, currentDate) + this.subsTw.tsOffset;
-        } else {
-          this.startTs += tickTs;
-          this.endTs += tickTs;
-        }
+        this.startTs += delta * this.interval;
+        this.endTs += delta * this.interval;
         this.data = this.updateData();
-        this.elapsed = this.elapsed - delta * this.subsTw.aggregation.interval;
+        this.elapsed = this.elapsed - delta * this.interval;
       }
     } else {
       this.data = this.updateData();
@@ -247,7 +223,7 @@ export class DataAggregator {
       let keyData = this.dataBuffer[key];
       aggKeyData.forEach((aggData, aggTimestamp) => {
         if (aggTimestamp <= this.startTs) {
-          if (this.subsTw.aggregation.stateData &&
+          if (this.stateData &&
             (!this.lastPrevKvPairData[key] || this.lastPrevKvPairData[key][0] < aggTimestamp)) {
             this.lastPrevKvPairData[key] = [aggTimestamp, aggData.aggValue];
           }
@@ -259,11 +235,11 @@ export class DataAggregator {
         }
       });
       keyData.sort((set1, set2) => set1[0] - set2[0]);
-      if (this.subsTw.aggregation.stateData) {
+      if (this.stateData) {
         this.updateStateBounds(keyData, deepClone(this.lastPrevKvPairData[key]));
       }
-      if (keyData.length > this.subsTw.aggregation.limit) {
-        keyData = keyData.slice(keyData.length - this.subsTw.aggregation.limit);
+      if (keyData.length > this.limit) {
+        keyData = keyData.slice(keyData.length - this.limit);
       }
       this.dataBuffer[key] = keyData;
     }
@@ -299,7 +275,7 @@ export class DataAggregator {
   }
 
   private processAggregatedData(data: SubscriptionData): AggregationMap {
-    const isCount = this.subsTw.aggregation.type === AggregationType.COUNT;
+    const isCount = this.aggregationType === AggregationType.COUNT;
     const aggregationMap: AggregationMap = {};
     for (const key of Object.keys(data)) {
       let aggKeyData = aggregationMap[key];
@@ -324,7 +300,7 @@ export class DataAggregator {
   }
 
   private updateAggregatedData(data: SubscriptionData) {
-    const isCount = this.subsTw.aggregation.type === AggregationType.COUNT;
+    const isCount = this.aggregationType === AggregationType.COUNT;
     for (const key of Object.keys(data)) {
       let aggKeyData = this.aggregationMap[key];
       if (!aggKeyData) {
@@ -336,8 +312,7 @@ export class DataAggregator {
         const timestamp = kvPair[0];
         const value = this.convertValue(kvPair[1]);
         const aggTimestamp = this.noAggregation ? timestamp : (this.startTs +
-          Math.floor((timestamp - this.startTs) / this.subsTw.aggregation.interval) *
-          this.subsTw.aggregation.interval + this.subsTw.aggregation.interval / 2);
+          Math.floor((timestamp - this.startTs) / this.interval) * this.interval + this.interval / 2);
         let aggData = aggKeyData.get(aggTimestamp);
         if (!aggData) {
           aggData = {
@@ -362,14 +337,6 @@ export class DataAggregator {
       return Number(val);
     } else {
       return val;
-    }
-  }
-
-  private getCurrentTime() {
-    if (this.subsTw.timeForComparison) {
-      return getCurrentTimeForComparison(this.subsTw.timeForComparison as moment_.unitOfTime.DurationConstructor, this.subsTw.timezone);
-    } else {
-      return getCurrentTime(this.subsTw.timezone);
     }
   }
 

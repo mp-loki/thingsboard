@@ -22,9 +22,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.stereotype.Component;
 import org.thingsboard.server.common.transport.TransportContext;
-import org.thingsboard.server.transport.coap.efento.adaptor.EfentoCoapAdaptor;
-import org.thingsboard.server.transport.coap.adaptors.JsonCoapAdaptor;
-import org.thingsboard.server.transport.coap.adaptors.ProtoCoapAdaptor;
+import org.thingsboard.server.transport.coap.adaptors.CoapTransportAdaptor;
 
 
 /**
@@ -49,14 +47,6 @@ public class CoapTransportContext extends TransportContext {
 
     @Getter
     @Autowired
-    private JsonCoapAdaptor jsonCoapAdaptor;
-
-    @Getter
-    @Autowired
-    private ProtoCoapAdaptor protoCoapAdaptor;
-
-    @Getter
-    @Autowired
-    private EfentoCoapAdaptor efentoCoapAdaptor;
+    private CoapTransportAdaptor adaptor;
 
 }

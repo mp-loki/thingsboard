@@ -37,14 +37,10 @@ import {
 } from '@app/shared/models/widget.models';
 import { HttpErrorResponse } from '@angular/common/http';
 import {
-  calculateIntervalEndTime,
-  calculateIntervalStartTime,
-  calculateTsOffset, ComparisonDuration,
   createSubscriptionTimewindow,
   createTimewindowForComparison,
-  getCurrentTime, isHistoryTypeTimewindow,
   SubscriptionTimewindow,
-  Timewindow, timewindowTypeChanged,
+  Timewindow,
   toHistoryTimewindow,
   WidgetTimewindow
 } from '@app/shared/models/time/time.models';
@@ -81,10 +77,8 @@ export class WidgetSubscription implements IWidgetSubscription {
   timeWindow: WidgetTimewindow;
   originalTimewindow: Timewindow;
   timeWindowConfig: Timewindow;
-  timezone: string;
   subscriptionTimewindow: SubscriptionTimewindow;
   useDashboardTimewindow: boolean;
-  tsOffset = 0;
 
   hasDataPageLink: boolean;
   singleEntity: boolean;
@@ -107,7 +101,7 @@ export class WidgetSubscription implements IWidgetSubscription {
   decimals: number;
   units: string;
   comparisonEnabled: boolean;
-  timeForComparison: ComparisonDuration;
+  timeForComparison: moment_.unitOfTime.DurationConstructor;
   comparisonTimeWindow: WidgetTimewindow;
   timewindowForComparison: SubscriptionTimewindow;
 
@@ -198,7 +192,6 @@ export class WidgetSubscription implements IWidgetSubscription {
       this.callbacks.onDataUpdateError = this.callbacks.onDataUpdateError || (() => {});
       this.callbacks.onSubscriptionMessage = this.callbacks.onSubscriptionMessage || (() => {});
       this.callbacks.onInitialPageDataChanged = this.callbacks.onInitialPageDataChanged || (() => {});
-      this.callbacks.forceReInit = this.callbacks.forceReInit || (() => {});
       this.callbacks.dataLoading = this.callbacks.dataLoading || (() => {});
       this.callbacks.legendDataUpdated = this.callbacks.legendDataUpdated || (() => {});
       this.callbacks.timeWindowUpdated = this.callbacks.timeWindowUpdated || (() => {});
@@ -218,10 +211,6 @@ export class WidgetSubscription implements IWidgetSubscription {
       this.timeWindow = {};
       this.useDashboardTimewindow = options.useDashboardTimewindow;
       this.stateData = options.stateData;
-      if (this.type === widgetType.latest) {
-        this.timezone = options.dashboardTimewindow.timezone;
-        this.updateTsOffset();
-      }
       if (this.useDashboardTimewindow) {
         this.timeWindowConfig = deepClone(options.dashboardTimewindow);
       } else {
@@ -229,7 +218,7 @@ export class WidgetSubscription implements IWidgetSubscription {
       }
 
       this.subscriptionTimewindow = null;
-      this.comparisonEnabled = options.comparisonEnabled && isHistoryTypeTimewindow(this.timeWindowConfig);
+      this.comparisonEnabled = options.comparisonEnabled;
       if (this.comparisonEnabled) {
         this.timeForComparison = options.timeForComparison;
 
@@ -419,13 +408,20 @@ export class WidgetSubscription implements IWidgetSubscription {
           this.dataLoaded(pageData, data1, datasourceIndex, pageLink, true);
         },
         initialPageDataChanged: this.initialPageDataChanged.bind(this),
-        forceReInit: this.forceReInit.bind(this),
         dataUpdated: this.dataUpdated.bind(this),
         updateRealtimeSubscription: () => {
-          return this.updateRealtimeSubscription();
+          if (this.comparisonEnabled && datasource.isAdditional) {
+            return this.updateSubscriptionForComparison();
+          } else {
+            return this.updateRealtimeSubscription();
+          }
         },
         setRealtimeSubscription: (subscriptionTimewindow) => {
-          this.updateRealtimeSubscription(deepClone(subscriptionTimewindow));
+          if (this.comparisonEnabled && datasource.isAdditional) {
+            this.updateSubscriptionForComparison(subscriptionTimewindow);
+          } else {
+            this.updateRealtimeSubscription(deepClone(subscriptionTimewindow));
+          }
         }
       };
       this.entityDataListeners.push(listener);
@@ -578,19 +574,13 @@ export class WidgetSubscription implements IWidgetSubscription {
     if (this.type === widgetType.timeseries || this.type === widgetType.alarm) {
       if (this.useDashboardTimewindow) {
         if (!isEqual(this.timeWindowConfig, newDashboardTimewindow) && newDashboardTimewindow) {
-          const isTimewindowTypeChanged = timewindowTypeChanged(this.timeWindowConfig, newDashboardTimewindow);
           this.timeWindowConfig = deepClone(newDashboardTimewindow);
-          this.update(isTimewindowTypeChanged);
-        }
-      }
-    } else if (this.type === widgetType.latest) {
-      if (newDashboardTimewindow && this.timezone !== newDashboardTimewindow.timezone) {
-        this.timezone = newDashboardTimewindow.timezone;
-        if (this.updateTsOffset()) {
           this.update();
+          return true;
         }
       }
     }
+    return false;
   }
 
   updateDataVisibility(index: number): void {
@@ -609,9 +599,8 @@ export class WidgetSubscription implements IWidgetSubscription {
 
   updateTimewindowConfig(newTimewindow: Timewindow): void {
     if (!this.useDashboardTimewindow) {
-      const isTimewindowTypeChanged = timewindowTypeChanged(this.timeWindowConfig, newTimewindow);
       this.timeWindowConfig = newTimewindow;
-      this.update(isTimewindowTypeChanged);
+      this.update();
     }
   }
 
@@ -620,11 +609,10 @@ export class WidgetSubscription implements IWidgetSubscription {
       this.ctx.dashboardTimewindowApi.onResetTimewindow();
     } else {
       if (this.originalTimewindow) {
-        const isTimewindowTypeChanged = timewindowTypeChanged(this.timeWindowConfig, this.originalTimewindow);
         this.timeWindowConfig = deepClone(this.originalTimewindow);
         this.originalTimewindow = null;
         this.callbacks.timeWindowUpdated(this, this.timeWindowConfig);
-        this.update(isTimewindowTypeChanged);
+        this.update();
       }
     }
   }
@@ -638,8 +626,7 @@ export class WidgetSubscription implements IWidgetSubscription {
       }
       this.timeWindowConfig = toHistoryTimewindow(this.timeWindowConfig, startTimeMs, endTimeMs, interval, this.ctx.timeService);
       this.callbacks.timeWindowUpdated(this, this.timeWindowConfig);
-      const isTimewindowTypeChanged = timewindowTypeChanged(this.timeWindowConfig, this.originalTimewindow);
-      this.update(isTimewindowTypeChanged);
+      this.update();
     }
   }
 
@@ -768,20 +755,16 @@ export class WidgetSubscription implements IWidgetSubscription {
     }
   }
 
-  update(isTimewindowTypeChanged = false) {
+  update() {
     if (this.type !== widgetType.rpc) {
       if (this.type === widgetType.alarm) {
         this.updateAlarmDataSubscription();
       } else {
-        if (this.type === widgetType.timeseries && this.options.comparisonEnabled && isTimewindowTypeChanged) {
-          this.forceReInit();
+        if (this.hasDataPageLink) {
+          this.updateDataSubscriptions();
         } else {
-          if (this.hasDataPageLink) {
-            this.updateDataSubscriptions();
-          } else {
-            this.notifyDataLoading();
-            this.dataSubscribe();
-          }
+          this.notifyDataLoading();
+          this.dataSubscribe();
         }
       }
     }
@@ -830,7 +813,6 @@ export class WidgetSubscription implements IWidgetSubscription {
         configDatasource: datasource,
         configDatasourceIndex: datasourceIndex,
         subscriptionTimewindow: this.subscriptionTimewindow,
-        latestTsOffset: this.tsOffset,
         dataLoaded: (pageData, data1, datasourceIndex1, pageLink1) => {
           this.dataLoaded(pageData, data1, datasourceIndex1, pageLink1, true);
         },
@@ -855,11 +837,9 @@ export class WidgetSubscription implements IWidgetSubscription {
     if (this.alarmDataListener) {
       this.ctx.alarmDataService.stopSubscription(this.alarmDataListener);
     }
-
     if (this.timeWindowConfig) {
       this.updateRealtimeSubscription();
     }
-
     this.alarmDataListener = {
       subscriptionTimewindow: this.subscriptionTimewindow,
       alarmSource: this.alarmSource,
@@ -898,27 +878,24 @@ export class WidgetSubscription implements IWidgetSubscription {
   }
 
   private dataSubscribe() {
-    this.updateDataTimewindow();
     if (!this.hasDataPageLink) {
-      if (this.type === widgetType.timeseries && this.timeWindowConfig && this.subscriptionTimewindow.fixedWindow) {
+      if (this.type === widgetType.timeseries && this.timeWindowConfig) {
+        this.updateDataTimewindow();
+        if (this.subscriptionTimewindow.fixedWindow) {
           this.onDataUpdated();
+        }
       }
       const forceUpdate = !this.datasources.length;
-      const notifyDataLoaded = !this.entityDataListeners.filter((listener) => listener.subscription ? true : false).length;
       this.entityDataListeners.forEach((listener) => {
         if (this.comparisonEnabled && listener.configDatasource.isAdditional) {
           listener.subscriptionTimewindow = this.timewindowForComparison;
         } else {
           listener.subscriptionTimewindow = this.subscriptionTimewindow;
-          listener.latestTsOffset = this.tsOffset;
         }
         this.ctx.entityDataService.startSubscription(listener);
       });
       if (forceUpdate) {
         this.onDataUpdated();
-      }
-      if (notifyDataLoaded) {
-        this.notifyDataLoaded();
       }
     }
   }
@@ -1103,31 +1080,13 @@ export class WidgetSubscription implements IWidgetSubscription {
 
   private updateTimewindow() {
     this.timeWindow.interval = this.subscriptionTimewindow.aggregation.interval || 1000;
-    this.timeWindow.timezone = this.subscriptionTimewindow.timezone;
     if (this.subscriptionTimewindow.realtimeWindowMs) {
-      if (this.subscriptionTimewindow.quickInterval) {
-        const currentDate = getCurrentTime(this.subscriptionTimewindow.timezone);
-        this.timeWindow.maxTime = calculateIntervalEndTime(
-          this.subscriptionTimewindow.quickInterval, currentDate) + this.subscriptionTimewindow.tsOffset;
-        this.timeWindow.minTime = calculateIntervalStartTime(
-          this.subscriptionTimewindow.quickInterval, currentDate) + this.subscriptionTimewindow.tsOffset;
-      } else {
-        this.timeWindow.maxTime = moment().valueOf() + this.subscriptionTimewindow.tsOffset + this.timeWindow.stDiff;
-        this.timeWindow.minTime = this.timeWindow.maxTime - this.subscriptionTimewindow.realtimeWindowMs;
-      }
+      this.timeWindow.maxTime = moment().valueOf() + this.timeWindow.stDiff;
+      this.timeWindow.minTime = this.timeWindow.maxTime - this.subscriptionTimewindow.realtimeWindowMs;
     } else if (this.subscriptionTimewindow.fixedWindow) {
-      this.timeWindow.maxTime = this.subscriptionTimewindow.fixedWindow.endTimeMs + this.subscriptionTimewindow.tsOffset;
-      this.timeWindow.minTime = this.subscriptionTimewindow.fixedWindow.startTimeMs + this.subscriptionTimewindow.tsOffset;
+      this.timeWindow.maxTime = this.subscriptionTimewindow.fixedWindow.endTimeMs;
+      this.timeWindow.minTime = this.subscriptionTimewindow.fixedWindow.startTimeMs;
     }
-  }
-
-  private updateTsOffset(): boolean {
-    const newOffset = calculateTsOffset(this.timezone);
-    if (this.tsOffset !== newOffset) {
-      this.tsOffset = newOffset;
-      return true;
-    }
-    return false;
   }
 
   private updateRealtimeSubscription(subscriptionTimewindow?: SubscriptionTimewindow): SubscriptionTimewindow {
@@ -1144,25 +1103,30 @@ export class WidgetSubscription implements IWidgetSubscription {
 
   private updateComparisonTimewindow() {
     this.comparisonTimeWindow.interval = this.timewindowForComparison.aggregation.interval || 1000;
-    this.comparisonTimeWindow.timezone = this.timewindowForComparison.timezone;
-    if (this.timewindowForComparison.fixedWindow) {
-      this.comparisonTimeWindow.maxTime = this.timewindowForComparison.fixedWindow.endTimeMs + this.timewindowForComparison.tsOffset;
-      this.comparisonTimeWindow.minTime = this.timewindowForComparison.fixedWindow.startTimeMs + this.timewindowForComparison.tsOffset;
+    if (this.timewindowForComparison.realtimeWindowMs) {
+      this.comparisonTimeWindow.maxTime = moment(this.timeWindow.maxTime).subtract(1, this.timeForComparison).valueOf();
+      this.comparisonTimeWindow.minTime = this.comparisonTimeWindow.maxTime - this.timewindowForComparison.realtimeWindowMs;
+    } else if (this.timewindowForComparison.fixedWindow) {
+      this.comparisonTimeWindow.maxTime = this.timewindowForComparison.fixedWindow.endTimeMs;
+      this.comparisonTimeWindow.minTime = this.timewindowForComparison.fixedWindow.startTimeMs;
     }
   }
 
-  private updateSubscriptionForComparison(): SubscriptionTimewindow {
-    this.timewindowForComparison = createTimewindowForComparison(this.subscriptionTimewindow, this.timeForComparison);
+  private updateSubscriptionForComparison(subscriptionTimewindow?: SubscriptionTimewindow): SubscriptionTimewindow {
+    if (subscriptionTimewindow) {
+      this.timewindowForComparison = subscriptionTimewindow;
+    } else {
+      if (!this.subscriptionTimewindow) {
+        this.subscriptionTimewindow = this.updateRealtimeSubscription();
+      }
+      this.timewindowForComparison = createTimewindowForComparison(this.subscriptionTimewindow, this.timeForComparison);
+    }
     this.updateComparisonTimewindow();
     return this.timewindowForComparison;
   }
 
   private initialPageDataChanged(nextPageData: PageData<EntityData>) {
     this.callbacks.onInitialPageDataChanged(this, nextPageData);
-  }
-
-  private forceReInit() {
-    this.callbacks.forceReInit();
   }
 
   private dataLoaded(pageData: PageData<EntityData>,
@@ -1371,7 +1335,7 @@ export class WidgetSubscription implements IWidgetSubscription {
     this.onDataUpdated();
   }
 
-  private alarmsUpdated(updated: Array<AlarmData>, alarms: PageData<AlarmData>) {
+  private alarmsUpdated(_updated: Array<AlarmData>, alarms: PageData<AlarmData>) {
     this.alarmsLoaded(alarms, 0, 0);
   }
 

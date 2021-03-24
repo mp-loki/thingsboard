@@ -105,7 +105,7 @@ export class WidgetComponentService {
             settingsSchema: this.utils.editWidgetInfo.settingsSchema,
             dataKeySettingsSchema: this.utils.editWidgetInfo.dataKeySettingsSchema,
             defaultConfig: this.utils.editWidgetInfo.defaultConfig
-          }, new WidgetTypeId('1'), new TenantId( NULL_UUID ), 'customWidgetBundle', undefined
+          }, new WidgetTypeId('1'), new TenantId( NULL_UUID ), 'customWidgetBundle'
         );
       }
       const initSubject = new ReplaySubject();

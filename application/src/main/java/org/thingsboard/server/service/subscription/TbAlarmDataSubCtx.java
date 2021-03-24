@@ -132,8 +132,8 @@ public class TbAlarmDataSubCtx extends TbAbstractDataSubCtx<AlarmDataQuery> {
     }
 
     @Override
-    public void createLatestValuesSubscriptions(List<EntityKey> keys) {
-        super.createLatestValuesSubscriptions(keys);
+    public void createSubscriptions(List<EntityKey> keys, boolean resultToLatestValues) {
+        super.createSubscriptions(keys, resultToLatestValues);
         createAlarmSubscriptions();
     }
 
@@ -282,7 +282,7 @@ public class TbAlarmDataSubCtx extends TbAbstractDataSubCtx<AlarmDataQuery> {
                 newSubsList.forEach(
                         entity -> {
                             log.trace("[{}][{}] Found new subscription for entity: {}", sessionRef.getSessionId(), cmdId, entity.getEntityId());
-                            subsToAdd.addAll(addSubscriptions(entity, keysByType, true, 0, 0));
+                            subsToAdd.addAll(addSubscriptions(entity, keysByType, true));
                         }
                 );
             }

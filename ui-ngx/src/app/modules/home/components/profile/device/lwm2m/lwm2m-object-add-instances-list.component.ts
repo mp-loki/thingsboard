@@ -14,11 +14,12 @@
 /// limitations under the License.
 ///
 
-import {Component, forwardRef,} from '@angular/core';
-import {ControlValueAccessor, FormBuilder, FormGroup, NG_VALUE_ACCESSOR, Validators} from '@angular/forms';
-import {Store} from '@ngrx/store';
-import {AppState} from '@core/core.state';
-import {INSTANCES_ID_VALUE_MAX, INSTANCES_ID_VALUE_MIN, KEY_REGEXP_NUMBER} from './profile-config.models';
+import { Component, forwardRef, } from '@angular/core';
+import { ControlValueAccessor, FormBuilder, FormGroup, NG_VALUE_ACCESSOR, Validators } from '@angular/forms';
+import { Store } from '@ngrx/store';
+import { AppState } from '@core/core.state';
+import { INSTANCES_ID_VALUE_MAX, INSTANCES_ID_VALUE_MIN, KEY_REGEXP_NUMBER } from './profile-config.models';
+import { DeviceProfileService } from '@core/http/device-profile.service';
 
 @Component({
   selector: 'tb-profile-lwm2m-object-add-instances-list',
@@ -42,6 +43,7 @@ export class Lwm2mObjectAddInstancesListComponent implements ControlValueAccesso
   private propagateChange = (v: any) => { };
 
   constructor(private store: Store<AppState>,
+              private deviceProfileService: DeviceProfileService,
               private fb: FormBuilder) {
     this.instancesListFormGroup = this.fb.group({
       instanceIdInput: [null, [

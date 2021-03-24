@@ -269,7 +269,7 @@ export class EntityAutocompleteComponent implements ControlValueAccessor, OnInit
             }
           }
         );
-      } else if (value.entityType && value.id) {
+      } else {
         const targetEntityType = this.checkEntityType(value.entityType);
         this.entityService.getEntity(targetEntityType, value.id, {ignoreLoading: true, ignoreErrors: true}).subscribe(
           (entity) => {
@@ -284,9 +284,6 @@ export class EntityAutocompleteComponent implements ControlValueAccessor, OnInit
             }
           }
         );
-      } else {
-        this.modelValue = null;
-        this.selectEntityFormGroup.get('entity').patchValue('', {emitEvent: false});
       }
     } else {
       this.modelValue = null;

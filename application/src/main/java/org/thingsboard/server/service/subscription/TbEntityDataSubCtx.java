@@ -50,6 +50,9 @@ public class TbEntityDataSubCtx extends TbAbstractDataSubCtx<EntityDataQuery> {
 
     @Getter
     @Setter
+    private TimeSeriesCmd tsCmd;
+    @Getter
+    @Setter
     private boolean initialDataSent;
     private TimeSeriesCmd curTsCmd;
     private LatestValueCmd latestValueCmd;
@@ -134,8 +137,7 @@ public class TbEntityDataSubCtx extends TbAbstractDataSubCtx<EntityDataQuery> {
                         for (TsValue update : new ArrayList<>(updateList)) {
                             if (update.getTs() < v.getTs()) {
                                 log.trace("[{}][{}][{}] Removed stale update for key: {} and ts: {}", sessionId, cmdId, subscriptionUpdate.getSubscriptionId(), k, update.getTs());
-                                // Looks like this is redundant feature and our UI is ready to merge the updates.
-                                //updateList.remove(update);
+                                updateList.remove(update);
                             } else if ((update.getTs() == v.getTs() && update.getValue().equals(v.getValue()))) {
                                 log.trace("[{}][{}][{}] Removed duplicate update for key: {} and ts: {}", sessionId, cmdId, subscriptionUpdate.getSubscriptionId(), k, update.getTs());
                                 updateList.remove(update);
@@ -180,18 +182,25 @@ public class TbEntityDataSubCtx extends TbAbstractDataSubCtx<EntityDataQuery> {
         subIdsToCancel.forEach(subToEntityIdMap::remove);
         List<EntityData> newSubsList = newDataMap.entrySet().stream().filter(entry -> !currentSubs.contains(entry.getKey())).map(Map.Entry::getValue).collect(Collectors.toList());
         if (!newSubsList.isEmpty()) {
-            // NOTE: We ignore the TS subscriptions for new entities here, because widgets will re-init it's content and will create new subscriptions.
-            if (curTsCmd == null && latestValueCmd != null) {
-                List<EntityKey> keys = latestValueCmd.getKeys();
-                if (keys != null && !keys.isEmpty()) {
-                    Map<EntityKeyType, List<EntityKey>> keysByType = getEntityKeyByTypeMap(keys);
-                    newSubsList.forEach(
-                            entity -> {
-                                log.trace("[{}][{}] Found new subscription for entity: {}", sessionRef.getSessionId(), cmdId, entity.getEntityId());
-                                subsToAdd.addAll(addSubscriptions(entity, keysByType, true, 0, 0));
-                            }
-                    );
-                }
+            boolean resultToLatestValues;
+            List<EntityKey> keys = null;
+            if (curTsCmd != null) {
+                resultToLatestValues = false;
+                keys = curTsCmd.getKeys().stream().map(key -> new EntityKey(EntityKeyType.TIME_SERIES, key)).collect(Collectors.toList());
+            } else if (latestValueCmd != null) {
+                resultToLatestValues = true;
+                keys = latestValueCmd.getKeys();
+            } else {
+                resultToLatestValues = true;
+            }
+            if (keys != null && !keys.isEmpty()) {
+                Map<EntityKeyType, List<EntityKey>> keysByType = getEntityKeyByTypeMap(keys);
+                newSubsList.forEach(
+                        entity -> {
+                            log.trace("[{}][{}] Found new subscription for entity: {}", sessionRef.getSessionId(), cmdId, entity.getEntityId());
+                            subsToAdd.addAll(addSubscriptions(entity, keysByType, resultToLatestValues));
+                        }
+                );
             }
         }
         wsService.sendWsMsg(sessionRef.getSessionId(), new EntityDataUpdate(cmdId, data, null, maxEntitiesPerDataSubscription));

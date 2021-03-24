@@ -19,18 +19,15 @@ import com.google.gson.Gson;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import lombok.Data;
-import org.thingsboard.server.common.data.id.TenantId;
 
 @Data
 public class LwM2mClientProfile {
-
-    private TenantId tenantId;
     /**
      * {"clientLwM2mSettings": {
      *      clientUpdateValueAfterConnect: false;
      *       }
      **/
-    private JsonObject postClientLwM2mSettings;
+    JsonObject postClientLwM2mSettings;
 
     /**
      * {"keyName": {
@@ -39,22 +36,22 @@ public class LwM2mClientProfile {
      *       "/3/0/2": "serialNumber"
      *       }
      **/
-    private JsonObject postKeyNameProfile;
+    JsonObject postKeyNameProfile;
 
     /**
      * [ "/2/0/0", "/2/0/1"]
      */
-    private JsonArray postAttributeProfile;
+    JsonArray postAttributeProfile;
 
     /**
      * [ "/2/0/0", "/2/0/1"]
      */
-    private JsonArray postTelemetryProfile;
+    JsonArray postTelemetryProfile;
 
     /**
      * [ "/2/0/0", "/2/0/1"]
      */
-    private JsonArray postObserveProfile;
+    JsonArray postObserveProfile;
 
     public LwM2mClientProfile clone() {
         LwM2mClientProfile lwM2mClientProfile = new LwM2mClientProfile();

@@ -42,7 +42,6 @@ import org.thingsboard.server.common.data.EntityView;
 import org.thingsboard.server.common.data.Tenant;
 import org.thingsboard.server.common.data.device.DeviceSearchQuery;
 import org.thingsboard.server.common.data.device.credentials.BasicMqttCredentials;
-import org.thingsboard.server.common.data.device.data.CoapDeviceTransportConfiguration;
 import org.thingsboard.server.common.data.device.data.DefaultDeviceConfiguration;
 import org.thingsboard.server.common.data.device.data.DefaultDeviceTransportConfiguration;
 import org.thingsboard.server.common.data.device.data.DeviceData;
@@ -263,9 +262,6 @@ public class DeviceServiceImpl extends AbstractEntityService implements DeviceSe
                     break;
                 case LWM2M:
                     deviceData.setTransportConfiguration(new Lwm2mDeviceTransportConfiguration());
-                    break;
-                case COAP:
-                    deviceData.setTransportConfiguration(new CoapDeviceTransportConfiguration());
                     break;
             }
         }

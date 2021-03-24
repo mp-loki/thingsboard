@@ -32,7 +32,6 @@ import { Observable, of } from 'rxjs';
 export interface EntityDataListener {
   subscriptionType: widgetType;
   subscriptionTimewindow?: SubscriptionTimewindow;
-  latestTsOffset?: number;
   configDatasource: Datasource;
   configDatasourceIndex: number;
   dataLoaded: (pageData: PageData<EntityData>,
@@ -40,7 +39,6 @@ export interface EntityDataListener {
                datasourceIndex: number, pageLink: EntityDataPageLink) => void;
   dataUpdated: (data: DataSetHolder, datasourceIndex: number, dataIndex: number, dataKeyIndex: number, detectChanges: boolean) => void;
   initialPageDataChanged?: (nextPageData: PageData<EntityData>) => void;
-  forceReInit?: () => void;
   updateRealtimeSubscription?: () => SubscriptionTimewindow;
   setRealtimeSubscription?: (subscriptionTimewindow: SubscriptionTimewindow) => void;
   subscriptionOptions?: EntityDataSubscriptionOptions;
@@ -62,16 +60,6 @@ export class EntityDataService {
   constructor(private telemetryService: TelemetryWebsocketService,
               private utils: UtilsService) {}
 
-  private static isUnresolvedDatasource(datasource: Datasource, pageLink: EntityDataPageLink): boolean {
-    if (datasource.type === DatasourceType.entity) {
-      return !datasource.entityFilter || !pageLink;
-    } else if (datasource.type === DatasourceType.entityCount) {
-      return !datasource.entityFilter;
-    } else {
-      return false;
-    }
-  }
-
   public prepareSubscription(listener: EntityDataListener,
                              ignoreDataUpdateOnIntervalTick = false): Observable<EntityDataLoadResult> {
     const datasource = listener.configDatasource;
@@ -83,7 +71,7 @@ export class EntityDataService {
       null,
       false,
       ignoreDataUpdateOnIntervalTick);
-    if (EntityDataService.isUnresolvedDatasource(datasource, datasource.pageLink)) {
+    if (datasource.type === DatasourceType.entity && (!datasource.entityFilter || !datasource.pageLink)) {
       return of(null);
     }
     listener.subscription = new EntityDataSubscription(listener, this.telemetryService, this.utils);
@@ -94,8 +82,6 @@ export class EntityDataService {
     if (listener.subscription) {
       if (listener.subscriptionType === widgetType.timeseries) {
         listener.subscriptionOptions.subscriptionTimewindow = deepClone(listener.subscriptionTimewindow);
-      } else if (listener.subscriptionType === widgetType.latest) {
-        listener.subscriptionOptions.latestTsOffset = listener.latestTsOffset;
       }
       listener.subscription.start();
     }
@@ -114,7 +100,7 @@ export class EntityDataService {
       keyFilters,
       true,
       ignoreDataUpdateOnIntervalTick);
-    if (EntityDataService.isUnresolvedDatasource(datasource, pageLink)) {
+    if (datasource.type === DatasourceType.entity && (!datasource.entityFilter || !pageLink)) {
       listener.dataLoaded(emptyPageData<EntityData>(), [],
         listener.configDatasourceIndex, listener.subscriptionOptions.pageLink);
       return of(null);
@@ -122,8 +108,6 @@ export class EntityDataService {
     listener.subscription = new EntityDataSubscription(listener, this.telemetryService, this.utils);
     if (listener.subscriptionType === widgetType.timeseries) {
       listener.subscriptionOptions.subscriptionTimewindow = deepClone(listener.subscriptionTimewindow);
-    } else if (listener.subscriptionType === widgetType.latest) {
-      listener.subscriptionOptions.latestTsOffset = listener.latestTsOffset;
     }
     return listener.subscription.subscribe();
   }

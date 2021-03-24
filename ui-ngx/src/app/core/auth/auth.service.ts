@@ -149,11 +149,8 @@ export class AuthService {
   }
 
   public changePassword(currentPassword: string, newPassword: string) {
-    return this.http.post('/api/auth/changePassword', {currentPassword, newPassword}, defaultHttpOptions()).pipe(
-      tap((loginResponse: LoginResponse) => {
-          this.setUserFromJwtToken(loginResponse.token, loginResponse.refreshToken, false);
-        }
-      ));
+    return this.http.post('/api/auth/changePassword',
+      {currentPassword, newPassword}, defaultHttpOptions());
   }
 
   public activateByEmailCode(emailCode: string): Observable<LoginResponse> {

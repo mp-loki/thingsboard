@@ -57,17 +57,17 @@ import {
   constructTableCssString,
   getCellContentInfo,
   getCellStyleInfo,
-  getRowStyleInfo,
-  RowStyleInfo,
-  TableWidgetDataKeySettings, TableWidgetSettings
+  TableWidgetDataKeySettings
 } from '@home/components/widget/lib/table-widget.models';
 import { Overlay } from '@angular/cdk/overlay';
 import { SubscriptionEntityInfo } from '@core/api/widget-api.models';
 import { DatePipe } from '@angular/common';
 
-export interface TimeseriesTableWidgetSettings extends TableWidgetSettings {
+interface TimeseriesTableWidgetSettings {
   showTimestamp: boolean;
   showMilliseconds: boolean;
+  displayPagination: boolean;
+  defaultPageSize: number;
   hideEmptyLines: boolean;
 }
 
@@ -111,8 +111,6 @@ export class TimeseriesTableWidgetComponent extends PageComponent implements OnI
   @ViewChildren(MatSort) sorts: QueryList<MatSort>;
 
   public displayPagination = true;
-  public enableStickyHeader = true;
-  public enableStickyAction = true;
   public pageSizeOptions;
   public textSearchMode = false;
   public textSearch: string = null;
@@ -130,8 +128,6 @@ export class TimeseriesTableWidgetComponent extends PageComponent implements OnI
   private hideEmptyLines = false;
   public showTimestamp = true;
   private dateFormatFilter: string;
-
-  private rowStylesInfo: RowStyleInfo;
 
   private subscriptions: Subscription[] = [];
 
@@ -200,15 +196,10 @@ export class TimeseriesTableWidgetComponent extends PageComponent implements OnI
 
     this.actionCellDescriptors = this.ctx.actionsApi.getActionDescriptors('actionCellButton');
 
-    this.searchAction.show = isDefined(this.settings.enableSearch) ? this.settings.enableSearch : true;
     this.displayPagination = isDefined(this.settings.displayPagination) ? this.settings.displayPagination : true;
-    this.enableStickyHeader = isDefined(this.settings.enableStickyHeader) ? this.settings.enableStickyHeader : true;
-    this.enableStickyAction = isDefined(this.settings.enableStickyAction) ? this.settings.enableStickyAction : true;
     this.hideEmptyLines = isDefined(this.settings.hideEmptyLines) ? this.settings.hideEmptyLines : false;
     this.showTimestamp = this.settings.showTimestamp !== false;
     this.dateFormatFilter = (this.settings.showMilliseconds !== true) ? 'yyyy-MM-dd HH:mm:ss' :  'yyyy-MM-dd HH:mm:ss.SSS';
-
-    this.rowStylesInfo = getRowStyleInfo(this.settings, 'rowData, ctx');
 
     const pageSize = this.settings.defaultPageSize;
     if (isDefined(pageSize) && isNumber(pageSize) && pageSize > 0) {
@@ -267,15 +258,13 @@ export class TimeseriesTableWidgetComponent extends PageComponent implements OnI
           });
           source.displayedColumns.push(index + '');
           source.rowDataTemplate[dataKey.label] = null;
-          source.stylesInfo.push(getCellStyleInfo(keySettings, 'value, rowData, ctx'));
+          source.stylesInfo.push(getCellStyleInfo(keySettings));
           const cellContentInfo = getCellContentInfo(keySettings, 'value, rowData, ctx');
           cellContentInfo.units = dataKey.units;
           cellContentInfo.decimals = dataKey.decimals;
           source.contentsInfo.push(cellContentInfo);
         }
-        if (this.actionCellDescriptors.length) {
-          source.displayedColumns.push('actions');
-        }
+        source.displayedColumns.push('actions');
         const tsDatasource = new TimeseriesDatasource(source, this.hideEmptyLines, this.dateFormatFilter, this.datePipe);
         tsDatasource.dataUpdated(this.data);
         this.sources.push(source);
@@ -387,43 +376,13 @@ export class TimeseriesTableWidgetComponent extends PageComponent implements OnI
     return source.datasource.entityId;
   }
 
-  public rowStyle(source: TimeseriesTableSource, row: TimeseriesRow): any {
-    let style: any = {};
-    if (this.rowStylesInfo.useRowStyleFunction && this.rowStylesInfo.rowStyleFunction) {
-      try {
-        const rowData = source.rowDataTemplate;
-        rowData.Timestamp = row[0];
-        source.header.forEach((headerInfo) => {
-          rowData[headerInfo.dataKey.name] = row[headerInfo.index];
-        });
-        style = this.rowStylesInfo.rowStyleFunction(rowData, this.ctx);
-        if (!isObject(style)) {
-          throw new TypeError(`${style === null ? 'null' : typeof style} instead of style object`);
-        }
-        if (Array.isArray(style)) {
-          throw new TypeError(`Array instead of style object`);
-        }
-      } catch (e) {
-        style = {};
-        console.warn(`Row style function in widget ` +
-          `'${this.ctx.widgetConfig.title}' returns '${e}'. Please check your row style function.`);
-      }
-    }
-    return style;
-  }
-
-  public cellStyle(source: TimeseriesTableSource, index: number, row: TimeseriesRow, value: any): any {
+  public cellStyle(source: TimeseriesTableSource, index: number, value: any): any {
     let style: any = {};
     if (index > 0) {
       const styleInfo = source.stylesInfo[index - 1];
       if (styleInfo.useCellStyleFunction && styleInfo.cellStyleFunction) {
         try {
-          const rowData = source.rowDataTemplate;
-          rowData.Timestamp = row[0];
-          source.header.forEach((headerInfo) => {
-            rowData[headerInfo.dataKey.name] = row[headerInfo.index];
-          });
-          style = styleInfo.cellStyleFunction(value, rowData, this.ctx);
+          style = styleInfo.cellStyleFunction(value);
           if (!isObject(style)) {
             throw new TypeError(`${style === null ? 'null' : typeof style} instead of style object`);
           }
@@ -466,7 +425,6 @@ export class TimeseriesTableWidgetComponent extends PageComponent implements OnI
       if (!isDefined(content)) {
         return '';
       } else {
-        content = this.utils.customTranslation(content, content);
         switch (typeof content) {
           case 'string':
             return this.domSanitizer.bypassSecurityTrustHtml(content);

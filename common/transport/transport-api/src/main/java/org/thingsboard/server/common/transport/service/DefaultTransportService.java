@@ -31,7 +31,6 @@ import org.thingsboard.server.common.data.Device;
 import org.thingsboard.server.common.data.DeviceProfile;
 import org.thingsboard.server.common.data.DeviceTransportType;
 import org.thingsboard.server.common.data.EntityType;
-import org.thingsboard.server.common.data.ResourceType;
 import org.thingsboard.server.common.data.Tenant;
 import org.thingsboard.server.common.data.id.DeviceId;
 import org.thingsboard.server.common.data.id.DeviceProfileId;
@@ -50,7 +49,6 @@ import org.thingsboard.server.common.stats.StatsFactory;
 import org.thingsboard.server.common.stats.StatsType;
 import org.thingsboard.server.common.transport.SessionMsgListener;
 import org.thingsboard.server.common.transport.TransportDeviceProfileCache;
-import org.thingsboard.server.common.transport.TransportResourceCache;
 import org.thingsboard.server.common.transport.TransportService;
 import org.thingsboard.server.common.transport.TransportServiceCallback;
 import org.thingsboard.server.common.transport.TransportTenantProfileCache;
@@ -63,6 +61,7 @@ import org.thingsboard.server.common.transport.util.JsonUtils;
 import org.thingsboard.server.gen.transport.TransportProtos;
 import org.thingsboard.server.gen.transport.TransportProtos.ProvisionDeviceRequestMsg;
 import org.thingsboard.server.gen.transport.TransportProtos.ProvisionDeviceResponseMsg;
+import org.thingsboard.server.gen.transport.TransportProtos.SessionInfoProto;
 import org.thingsboard.server.gen.transport.TransportProtos.ToCoreMsg;
 import org.thingsboard.server.gen.transport.TransportProtos.ToRuleEngineMsg;
 import org.thingsboard.server.gen.transport.TransportProtos.ToTransportMsg;
@@ -132,7 +131,6 @@ public class DefaultTransportService implements TransportService {
     private final TransportRateLimitService rateLimitService;
     private final DataDecodingEncodingService dataDecodingEncodingService;
     private final SchedulerComponent scheduler;
-    private final TransportResourceCache transportResourceCache;
 
     protected TbQueueRequestTemplate<TbProtoQueueMsg<TransportApiRequestMsg>, TbProtoQueueMsg<TransportApiResponseMsg>> transportApiRequestTemplate;
     protected TbQueueProducer<TbProtoQueueMsg<ToRuleEngineMsg>> ruleEngineMsgProducer;
@@ -159,7 +157,7 @@ public class DefaultTransportService implements TransportService {
                                    TransportDeviceProfileCache deviceProfileCache,
                                    TransportTenantProfileCache tenantProfileCache,
                                    TbApiUsageClient apiUsageClient, TransportRateLimitService rateLimitService,
-                                   DataDecodingEncodingService dataDecodingEncodingService, SchedulerComponent scheduler, TransportResourceCache transportResourceCache) {
+                                   DataDecodingEncodingService dataDecodingEncodingService, SchedulerComponent scheduler) {
         this.serviceInfoProvider = serviceInfoProvider;
         this.queueProvider = queueProvider;
         this.producerProvider = producerProvider;
@@ -171,7 +169,6 @@ public class DefaultTransportService implements TransportService {
         this.rateLimitService = rateLimitService;
         this.dataDecodingEncodingService = dataDecodingEncodingService;
         this.scheduler = scheduler;
-        this.transportResourceCache = transportResourceCache;
     }
 
     @PostConstruct
@@ -258,12 +255,12 @@ public class DefaultTransportService implements TransportService {
     }
 
     @Override
-    public TransportProtos.GetResourceResponseMsg getResource(TransportProtos.GetResourceRequestMsg msg) {
+    public TransportProtos.GetResourcesResponseMsg getResources(TransportProtos.GetResourcesRequestMsg msg) {
         TbProtoQueueMsg<TransportProtos.TransportApiRequestMsg> protoMsg =
-                new TbProtoQueueMsg<>(UUID.randomUUID(), TransportProtos.TransportApiRequestMsg.newBuilder().setResourceRequestMsg(msg).build());
+                new TbProtoQueueMsg<>(UUID.randomUUID(), TransportProtos.TransportApiRequestMsg.newBuilder().setResourcesRequestMsg(msg).build());
         try {
             TbProtoQueueMsg<TransportApiResponseMsg> response = transportApiRequestTemplate.send(protoMsg).get();
-            return response.getValue().getResourceResponseMsg();
+            return response.getValue().getResourcesResponseMsg();
         } catch (InterruptedException | ExecutionException e) {
             throw new RuntimeException(e);
         }
@@ -295,7 +292,6 @@ public class DefaultTransportService implements TransportService {
                 response -> callback.onSuccess(response.getValue().getValidateCredResponseMsg()), callback::onError, transportCallbackExecutor);
     }
 
-    @Override
     public void process(DeviceTransportType transportType, TransportProtos.ValidateDeviceX509CertRequestMsg msg, TransportServiceCallback<ValidateDeviceCredentialsResponse> callback) {
         log.trace("Processing msg: {}", msg);
         TbProtoQueueMsg<TransportApiRequestMsg> protoMsg = new TbProtoQueueMsg<>(UUID.randomUUID(), TransportApiRequestMsg.newBuilder().setValidateX509CertRequestMsg(msg).build());
@@ -705,17 +701,9 @@ public class DefaultTransportService implements TransportService {
                     rateLimitService.remove(new DeviceId(entityUuid));
                 }
             } else if (toSessionMsg.hasResourceUpdateMsg()) {
-                TransportProtos.ResourceUpdateMsg msg = toSessionMsg.getResourceUpdateMsg();
-                TenantId tenantId = new TenantId(new UUID(msg.getTenantIdMSB(), msg.getTenantIdLSB()));
-                ResourceType resourceType = ResourceType.valueOf(msg.getResourceType());
-                String resourceId = msg.getResourceKey();
-                transportResourceCache.update(tenantId, resourceType, resourceId);
+                //TODO: update resource cache
             } else if (toSessionMsg.hasResourceDeleteMsg()) {
-                TransportProtos.ResourceDeleteMsg msg = toSessionMsg.getResourceDeleteMsg();
-                TenantId tenantId = new TenantId(new UUID(msg.getTenantIdMSB(), msg.getTenantIdLSB()));
-                ResourceType resourceType = ResourceType.valueOf(msg.getResourceType());
-                String resourceId = msg.getResourceKey();
-                transportResourceCache.evict(tenantId, resourceType, resourceId);
+                //TODO: remove resource from cache
             } else {
                 //TODO: should we notify the device actor about missed session?
                 log.debug("[{}] Missing session.", sessionId);

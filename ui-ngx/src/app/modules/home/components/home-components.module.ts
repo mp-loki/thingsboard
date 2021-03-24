@@ -96,7 +96,6 @@ import { DeviceProfileTransportConfigurationComponent } from '@home/components/p
 import { DeviceProfileDialogComponent } from '@home/components/profile/device-profile-dialog.component';
 import { DeviceProfileAutocompleteComponent } from '@home/components/profile/device-profile-autocomplete.component';
 import { MqttDeviceProfileTransportConfigurationComponent } from '@home/components/profile/device/mqtt-device-profile-transport-configuration.component';
-import { CoapDeviceProfileTransportConfigurationComponent } from '@home/components/profile/device/coap-device-profile-transport-configuration.component';
 import { DeviceProfileAlarmsComponent } from '@home/components/profile/alarm/device-profile-alarms.component';
 import { DeviceProfileAlarmComponent } from '@home/components/profile/alarm/device-profile-alarm.component';
 import { CreateAlarmRulesComponent } from '@home/components/profile/alarm/create-alarm-rules.component';
@@ -133,7 +132,6 @@ import { ManageDashboardStatesDialogComponent } from '@home/components/dashboard
 import { DashboardStateDialogComponent } from '@home/components/dashboard-page/states/dashboard-state-dialog.component';
 import { EmbedDashboardDialogComponent } from '@home/components/widget/dialog/embed-dashboard-dialog.component';
 import { EMBED_DASHBOARD_DIALOG_TOKEN } from '@home/components/widget/dialog/embed-dashboard-dialog-token';
-import { DisplayWidgetTypesPanelComponent } from '@home/components/dashboard-page/widget-types-panel.component';
 
 @NgModule({
   declarations:
@@ -213,7 +211,6 @@ import { DisplayWidgetTypesPanelComponent } from '@home/components/dashboard-pag
       DeviceProfileConfigurationComponent,
       DefaultDeviceProfileTransportConfigurationComponent,
       MqttDeviceProfileTransportConfigurationComponent,
-      CoapDeviceProfileTransportConfigurationComponent,
       DeviceProfileTransportConfigurationComponent,
       CreateAlarmRulesComponent,
       AlarmRuleComponent,
@@ -246,8 +243,7 @@ import { DisplayWidgetTypesPanelComponent } from '@home/components/dashboard-pag
       DashboardSettingsDialogComponent,
       ManageDashboardStatesDialogComponent,
       DashboardStateDialogComponent,
-      EmbedDashboardDialogComponent,
-      DisplayWidgetTypesPanelComponent
+      EmbedDashboardDialogComponent
     ],
   imports: [
     CommonModule,
@@ -316,7 +312,6 @@ import { DisplayWidgetTypesPanelComponent } from '@home/components/dashboard-pag
     DeviceProfileConfigurationComponent,
     DefaultDeviceProfileTransportConfigurationComponent,
     MqttDeviceProfileTransportConfigurationComponent,
-    CoapDeviceProfileTransportConfigurationComponent,
     DeviceProfileTransportConfigurationComponent,
     CreateAlarmRulesComponent,
     AlarmRuleComponent,
@@ -350,8 +345,7 @@ import { DisplayWidgetTypesPanelComponent } from '@home/components/dashboard-pag
     DashboardSettingsDialogComponent,
     ManageDashboardStatesDialogComponent,
     DashboardStateDialogComponent,
-    EmbedDashboardDialogComponent,
-    DisplayWidgetTypesPanelComponent
+    EmbedDashboardDialogComponent
   ],
   providers: [
     WidgetComponentService,

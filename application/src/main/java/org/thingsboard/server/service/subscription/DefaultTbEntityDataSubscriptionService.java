@@ -215,7 +215,7 @@ public class DefaultTbEntityDataSubscriptionService implements TbEntityDataSubsc
         } else {
             historyFuture = Futures.immediateFuture(ctx);
         }
-        Futures.addCallback(historyFuture, new FutureCallback<>() {
+        Futures.addCallback(historyFuture, new FutureCallback<TbEntityDataSubCtx>() {
             @Override
             public void onSuccess(@Nullable TbEntityDataSubCtx theCtx) {
                 if (cmd.getLatestCmd() != null) {
@@ -278,7 +278,7 @@ public class DefaultTbEntityDataSubscriptionService implements TbEntityDataSubsc
             wsService.sendWsMsg(ctx.getSessionId(), update);
         } else {
             ctx.fetchAlarms();
-            ctx.createLatestValuesSubscriptions(cmd.getQuery().getLatestValues());
+            ctx.createSubscriptions(cmd.getQuery().getLatestValues(), true);
             if (adq.getPageLink().getTimeWindow() > 0) {
                 TbAlarmDataSubCtx finalCtx = ctx;
                 ScheduledFuture<?> task = scheduler.scheduleWithFixedDelay(
@@ -419,7 +419,7 @@ public class DefaultTbEntityDataSubscriptionService implements TbEntityDataSubsc
             }
             wsService.sendWsMsg(ctx.getSessionId(), update);
             if (subscribe) {
-                ctx.createTimeseriesSubscriptions(keys.stream().map(key -> new EntityKey(EntityKeyType.TIME_SERIES, key)).collect(Collectors.toList()), cmd.getStartTs(), cmd.getEndTs());
+                ctx.createSubscriptions(keys.stream().map(key -> new EntityKey(EntityKeyType.TIME_SERIES, key)).collect(Collectors.toList()), false);
             }
             ctx.getData().getData().forEach(ed -> ed.getTimeseries().clear());
             return ctx;
@@ -468,7 +468,7 @@ public class DefaultTbEntityDataSubscriptionService implements TbEntityDataSubsc
                         update = new EntityDataUpdate(ctx.getCmdId(), null, ctx.getData().getData(), ctx.getMaxEntitiesPerDataSubscription());
                     }
                     wsService.sendWsMsg(ctx.getSessionId(), update);
-                    ctx.createLatestValuesSubscriptions(latestCmd.getKeys());
+                    ctx.createSubscriptions(latestCmd.getKeys(), true);
                 }
 
                 @Override
@@ -484,7 +484,7 @@ public class DefaultTbEntityDataSubscriptionService implements TbEntityDataSubsc
                 wsService.sendWsMsg(ctx.getSessionId(), update);
                 ctx.setInitialDataSent(true);
             }
-            ctx.createLatestValuesSubscriptions(latestCmd.getKeys());
+            ctx.createSubscriptions(latestCmd.getKeys(), true);
         }
     }
 

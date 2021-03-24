@@ -17,12 +17,9 @@ package org.thingsboard.rule.engine.profile;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
-import com.google.common.util.concurrent.ListenableFuture;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
-import org.thingsboard.common.util.JacksonUtil;
-import org.thingsboard.common.util.DonAsynchron;
 import org.thingsboard.rule.engine.action.TbAlarmResult;
 import org.thingsboard.rule.engine.api.TbContext;
 import org.thingsboard.rule.engine.profile.state.PersistedAlarmRuleState;
@@ -31,14 +28,15 @@ import org.thingsboard.server.common.data.DataConstants;
 import org.thingsboard.server.common.data.alarm.Alarm;
 import org.thingsboard.server.common.data.alarm.AlarmSeverity;
 import org.thingsboard.server.common.data.alarm.AlarmStatus;
-import org.thingsboard.server.common.data.device.profile.AlarmConditionSpecType;
 import org.thingsboard.server.common.data.device.profile.AlarmConditionKeyType;
 import org.thingsboard.server.common.data.device.profile.DeviceProfileAlarm;
 import org.thingsboard.server.common.data.id.EntityId;
+import org.thingsboard.server.common.data.query.EntityKeyType;
+import org.thingsboard.server.common.data.query.KeyFilter;
 import org.thingsboard.server.common.msg.TbMsg;
 import org.thingsboard.server.common.msg.TbMsgMetaData;
 import org.thingsboard.server.common.msg.queue.ServiceQueue;
-import org.thingsboard.server.dao.alarm.AlarmOperationResult;
+import org.thingsboard.common.util.JacksonUtil;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -103,7 +101,7 @@ class AlarmState {
         if (resultState != null) {
             TbAlarmResult result = calculateAlarmResult(ctx, resultState);
             if (result != null) {
-                pushMsg(ctx, result, resultState);
+                pushMsg(ctx, result);
             }
             stateUpdate = clearAlarmState(stateUpdate, clearState);
         } else if (currentAlarm != null && clearState != null) {
@@ -117,16 +115,8 @@ class AlarmState {
                 for (AlarmRuleState state : createRulesSortedBySeverityDesc) {
                     stateUpdate = clearAlarmState(stateUpdate, state);
                 }
-                ListenableFuture<AlarmOperationResult> alarmClearOperationResult = ctx.getAlarmService().clearAlarmForResult(
-                        ctx.getTenantId(), currentAlarm.getId(), createDetails(clearState), System.currentTimeMillis()
-                );
-                DonAsynchron.withCallback(alarmClearOperationResult,
-                        result -> {
-                            pushMsg(ctx, new TbAlarmResult(false, false, true, result.getAlarm()), clearState);
-                        },
-                        throwable -> {
-                            throw new RuntimeException(throwable);
-                        });
+                ctx.getAlarmService().clearAlarm(ctx.getTenantId(), currentAlarm.getId(), createDetails(clearState), System.currentTimeMillis());
+                pushMsg(ctx, new TbAlarmResult(false, false, true, currentAlarm));
                 currentAlarm = null;
             } else if (AlarmEvalResult.FALSE.equals(evalResult)) {
                 stateUpdate = clearAlarmState(stateUpdate, clearState);
@@ -165,7 +155,7 @@ class AlarmState {
         }
     }
 
-    public void pushMsg(TbContext ctx, TbAlarmResult alarmResult, AlarmRuleState ruleState) {
+    public void pushMsg(TbContext ctx, TbAlarmResult alarmResult) {
         JsonNode jsonNodes = JacksonUtil.valueToTree(alarmResult.getAlarm());
         String data = jsonNodes.toString();
         TbMsgMetaData metaData = lastMsgMetaData != null ? lastMsgMetaData.copy() : new TbMsgMetaData();
@@ -184,18 +174,8 @@ class AlarmState {
             relationType = "Alarm Cleared";
             metaData.putValue(DataConstants.IS_CLEARED_ALARM, Boolean.TRUE.toString());
         }
-        setAlarmConditionMetadata(ruleState, metaData);
         TbMsg newMsg = ctx.newMsg(lastMsgQueueName != null ? lastMsgQueueName : ServiceQueue.MAIN, "ALARM", originator, metaData, data);
         ctx.tellNext(newMsg, relationType);
-    }
-
-    protected void setAlarmConditionMetadata(AlarmRuleState ruleState, TbMsgMetaData metaData) {
-        if (ruleState.getSpec().getType() == AlarmConditionSpecType.REPEATING) {
-            metaData.putValue(DataConstants.ALARM_CONDITION_REPEATS, String.valueOf(ruleState.getState().getEventCount()));
-        }
-        if (ruleState.getSpec().getType() == AlarmConditionSpecType.DURATION) {
-            metaData.putValue(DataConstants.ALARM_CONDITION_DURATION, String.valueOf(ruleState.getState().getDuration()));
-        }
     }
 
     public void updateState(DeviceProfileAlarm alarm, PersistedAlarmState alarmState) {
@@ -272,9 +252,7 @@ class AlarmState {
         if (StringUtils.isNotEmpty(alarmDetailsStr)) {
             for (var keyFilter : ruleState.getAlarmRule().getCondition().getCondition()) {
                 EntityKeyValue entityKeyValue = dataSnapshot.getValue(keyFilter.getKey());
-                if (entityKeyValue != null) {
-                    alarmDetailsStr = alarmDetailsStr.replaceAll(String.format("\\$\\{%s}", keyFilter.getKey().getKey()), getValueAsString(entityKeyValue));
-                }
+                alarmDetailsStr = alarmDetailsStr.replaceAll(String.format("\\$\\{%s}", keyFilter.getKey().getKey()), getValueAsString(entityKeyValue));
             }
             ObjectNode newDetails = JacksonUtil.newObjectNode();
             newDetails.put("data", alarmDetailsStr);
